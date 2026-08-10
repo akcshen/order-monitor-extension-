@@ -29,3 +29,11 @@ export function createEmptyPlatform() {
 export const DEFAULT_SEEN = {}
 export const DEFAULT_MAIL_LOGS = []
 export const DEFAULT_PENDING = []
+
+export const DEFAULT_STATE = {
+  settings: { ...DEFAULT_SETTINGS },
+  platforms: [],
+  seenOrders: { ...DEFAULT_SEEN },
+  mailLogs: [...DEFAULT_MAIL_LOGS],
+  pendingMails: [...DEFAULT_PENDING],
+}

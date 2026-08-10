@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_SETTINGS, createEmptyPlatform } from '../src/shared/types.js'
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_STATE,
+  createEmptyPlatform,
+} from '../src/shared/types.js'
 
 describe('defaults', () => {
   it('DEFAULT_SETTINGS has required keys', () => {
@@ -12,6 +16,13 @@ describe('defaults', () => {
       mergeNewOrdersInOneEmail: true,
       autoOpenOrderListTab: true,
     })
+  })
+
+  it('DEFAULT_STATE has settings and platforms keys', () => {
+    expect(DEFAULT_STATE).toHaveProperty('settings')
+    expect(DEFAULT_STATE).toHaveProperty('platforms')
+    expect(DEFAULT_STATE.settings).toEqual(DEFAULT_SETTINGS)
+    expect(DEFAULT_STATE.platforms).toEqual([])
   })
 
   it('createEmptyPlatform returns editable rule shell', () => {

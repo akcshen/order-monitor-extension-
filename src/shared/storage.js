@@ -47,6 +47,11 @@ export async function upsertPlatform(platform) {
   return next
 }
 
+export async function getPlatformById(id) {
+  const { platforms } = await getState()
+  return platforms.find((p) => p.id === id) || null
+}
+
 export async function removePlatform(id) {
   const { platforms, seenOrders } = await getState()
   const next = platforms.filter((p) => p.id !== id)
