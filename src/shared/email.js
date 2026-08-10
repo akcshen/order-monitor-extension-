@@ -9,17 +9,27 @@ export function buildOrderEmail({ platformName, orders, now = new Date() }) {
     return `- ${o.orderId}${extras ? `（${extras}）` : ''}`
   })
   const text = [`平台：${platformName}`, `时间：${time}`, '', ...lines].join('\n')
+  const fieldKeys = []
+  const seenKeys = new Set()
+  for (const o of orders) {
+    for (const k of Object.keys(o.fields || {})) {
+      if (!seenKeys.has(k)) {
+        seenKeys.add(k)
+        fieldKeys.push(k)
+      }
+    }
+  }
+  const headers = ['订单号', ...fieldKeys]
+    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .join('')
   const rows = orders
     .map((o) => {
       const tds = [
         `<td>${escapeHtml(o.orderId)}</td>`,
-        ...Object.values(o.fields || {}).map((v) => `<td>${escapeHtml(v)}</td>`),
+        ...fieldKeys.map((k) => `<td>${escapeHtml(o.fields?.[k] ?? '')}</td>`),
       ].join('')
       return `<tr>${tds}</tr>`
     })
-    .join('')
-  const headers = ['订单号', ...Object.keys(orders[0]?.fields || {})]
-    .map((h) => `<th>${escapeHtml(h)}</th>`)
     .join('')
   const html = `<p>平台：${escapeHtml(platformName)}</p><p>时间：${escapeHtml(
     time,
