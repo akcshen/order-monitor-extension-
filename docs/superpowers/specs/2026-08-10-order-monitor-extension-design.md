@@ -1,7 +1,7 @@
 # 多平台订单监控 Chrome 扩展 — 设计文档
 
 **日期：** 2026-08-10  
-**状态：** 待用户审阅  
+**状态：** 已实现（执行计划见 `docs/superpowers/plans/2026-08-10-order-monitor-extension.md`）  
 **项目目录：** `BrowserPlugins/order-monitor-extension/`（独立子目录实现，不写在仓库根目录）
 
 ## 1. 背景与目标
