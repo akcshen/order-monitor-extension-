@@ -93,15 +93,19 @@ async function handleLoginDetected({ platformId, href }) {
 
 async function handleCandidates({ platformId, orders }) {
   const state = await getState()
-  if (!state.settings.enabled) return { ok: true, skipped: true }
   const platform = state.platforms.find((p) => p.id === platformId)
-  if (!platform?.enabled) return { ok: true, skipped: true }
+  if (!platform) return { ok: true, skipped: true }
+
   const { newOrders, nextSeen } = diffNewOrders(
     state.seenOrders,
     platformId,
     orders || [],
   )
   await saveSeenOrders(nextSeen)
+
+  if (!state.settings.enabled || !platform.enabled) {
+    return { ok: true, skipped: true, newCount: 0 }
+  }
   if (!newOrders.length) return { ok: true, newCount: 0 }
 
   const batch = state.settings.mergeNewOrdersInOneEmail
