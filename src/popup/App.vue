@@ -134,7 +134,11 @@ onMounted(loadState)
 
     <section class="section">
       <h2>监控状态</h2>
-      <MonitorStatus :platforms="state.platforms" :mail-logs="state.mailLogs" />
+      <MonitorStatus
+        :platforms="state.platforms"
+        :mail-logs="state.mailLogs"
+        @changed="refreshLists"
+      />
     </section>
 
     <el-button text type="primary" @click="showAdvanced = !showAdvanced">

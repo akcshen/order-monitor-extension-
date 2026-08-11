@@ -97,6 +97,8 @@ async function handleMessage(message) {
       return enqueueCandidates(message)
     case MSG.LOGIN_DETECTED:
       return handleLoginDetected(message)
+    case MSG.RESUME_PLATFORM:
+      return handleResumePlatform(message)
     case MSG.TEST_EMAIL:
       return handleTestEmail()
     case MSG.RETRY_PENDING:
@@ -110,11 +112,16 @@ async function handleLoginDetected({ platformId, href }) {
   const { platforms } = await getState()
   const platform = platforms.find((p) => p.id === platformId)
   if (!platform) return { ok: true, skipped: true }
-
-  if (platform.enabled) {
-    await upsertPlatform({ ...platform, enabled: false })
-    await syncAlarms()
+  if (!platform.enabled && platform.pausedByLogin) {
+    return { ok: true, skipped: true, alreadyPaused: true }
   }
+
+  await upsertPlatform({
+    ...platform,
+    enabled: false,
+    pausedByLogin: true,
+  })
+  await syncAlarms()
 
   const name = platform.name || platformId
   try {
@@ -122,11 +129,27 @@ async function handleLoginDetected({ platformId, href }) {
       type: 'basic',
       iconUrl: 'icons/icon128.png',
       title: '需要重新登录',
-      message: `${name} 检测到登录页，已暂停该平台监控${href ? `：${href}` : ''}`,
+      message: `${name} 检测到登录页，已暂停监控。登录后会自动恢复，也可在插件里点「恢复」。`,
     })
   } catch (_) {}
 
   return { ok: true, paused: true, platformId }
+}
+
+async function handleResumePlatform({ platformId }) {
+  const { platforms } = await getState()
+  const platform = platforms.find((p) => p.id === platformId)
+  if (!platform) return { ok: true, skipped: true }
+
+  if (!platform.enabled || platform.pausedByLogin) {
+    await upsertPlatform({
+      ...platform,
+      enabled: true,
+      pausedByLogin: false,
+    })
+    await syncAlarms()
+  }
+  return { ok: true, resumed: true, platformId }
 }
 
 async function handleCandidates({ platformId, orders }) {
@@ -139,16 +162,38 @@ async function handleCandidates({ platformId, orders }) {
     platformId,
     orders || [],
   )
-  await saveSeenOrders(nextSeen)
 
   if (!state.settings.enabled || !platform.enabled) {
+    await saveSeenOrders(nextSeen)
     return { ok: true, skipped: true, newCount: 0 }
   }
-  if (!newOrders.length) return { ok: true, newCount: 0 }
+  if (!newOrders.length) {
+    await saveSeenOrders(nextSeen)
+    return { ok: true, newCount: 0 }
+  }
+
+  if (!state.settings.toEmail?.trim() || !isMailSenderConfigured()) {
+    // 未配置收件邮箱/发信通道：不推进 seen，避免漏通知
+    try {
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: '无法发信',
+        message: !state.settings.toEmail?.trim()
+          ? '请先在插件中填写收件邮箱'
+          : '发信通道未配置，请联系管理员检查 .env.local',
+      })
+    } catch (_) {}
+    return { ok: false, error: 'mail_not_configured', newCount: newOrders.length }
+  }
+
+  await saveSeenOrders(nextSeen)
 
   const batch = state.settings.mergeNewOrdersInOneEmail
     ? [newOrders]
     : newOrders.map((o) => [o])
+
+  const PENDING_MAX = 50
 
   for (const group of batch) {
     const mail = buildOrderEmail({
@@ -175,9 +220,9 @@ async function handleCandidates({ platformId, orders }) {
       } catch (_) {}
     } else {
       const pending = [
-        ...(await getState()).pendingMails,
         { platformId, orders: group, mail, at: Date.now() },
-      ]
+        ...(await getState()).pendingMails,
+      ].slice(0, PENDING_MAX)
       await setPendingMails(pending)
       try {
         await chrome.notifications.create({

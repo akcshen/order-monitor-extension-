@@ -1,45 +1,45 @@
 import { MSG } from '../shared/messaging.js'
-import { urlMatches } from '../shared/urlMatch.js'
 import { extractOrdersFromJson } from '../shared/jsonPath.js'
 import { parseOrdersFromDom } from './dom-parser.js'
+import { BUILTIN_PLATFORMS } from '../shared/builtin-platforms.js'
+import {
+  hrefMatchesPlatform,
+  normalizeBuiltinPlatform,
+} from '../shared/builtin-platform-utils.js'
+// Vite 将钩子源码作为字符串打包，便于同步注入，减少错过首屏请求
+import hookSource from '../injected/network-hook.js?raw'
 
 const HOOK_SOURCE = 'order-monitor-hook'
 
-/**
- * 优先同步注入（textContent），尽快挂钩 fetch/XHR；
- * 若页面 CSP / 环境禁止 inline，再回退 script.src。
- */
-async function injectNetworkHook() {
-  const url = chrome.runtime.getURL('src/injected/network-hook.js')
+function configuredBuiltins() {
+  return BUILTIN_PLATFORMS.filter(
+    (d) => d?.orderListUrl && !String(d.orderListUrl).includes('REPLACE_ME'),
+  ).map((d) => normalizeBuiltinPlatform(d))
+}
+
+function injectNetworkHookSync() {
+  if (window.__orderMonitorHookInstalled) return
   try {
-    const code = await fetch(url).then((r) => {
-      if (!r.ok) throw new Error(`hook fetch ${r.status}`)
-      return r.text()
-    })
     const s = document.createElement('script')
-    s.textContent = code
+    s.textContent = hookSource
     ;(document.documentElement || document.head).appendChild(s)
     s.remove()
+    window.__orderMonitorHookInstalled = true
   } catch (_) {
-    const s = document.createElement('script')
-    s.src = url
-    ;(document.documentElement || document.head).appendChild(s)
-    s.remove()
+    // CSP 禁止 inline 时回退 WAR
+    try {
+      const s = document.createElement('script')
+      s.src = chrome.runtime.getURL('src/injected/network-hook.js')
+      ;(document.documentElement || document.head).appendChild(s)
+      s.remove()
+      window.__orderMonitorHookInstalled = true
+    } catch (__) {}
   }
 }
 
-async function loadMatchingPlatforms() {
+async function loadStoragePlatforms() {
   const { platforms = [] } = await chrome.storage.local.get('platforms')
-  const href = location.href
-  return platforms.filter((p) => {
-    if (!p?.enabled) return false
-    const patterns = Array.isArray(p.matchUrls) ? p.matchUrls.filter(Boolean) : []
-    if (patterns.some((pattern) => urlMatches(pattern, href))) return true
-    // 兼容：仅配了访问路径、尚未生成 matchUrls 的旧数据
-    const page = (p.orderListUrl || '').trim()
-    if (page && (href === page || href.startsWith(page.split('?')[0]))) return true
-    return false
-  })
+  return Array.isArray(platforms) ? platforms : []
 }
 
 function sendOrders(platformId, orders, source) {
@@ -56,6 +56,7 @@ function sendOrders(platformId, orders, source) {
 
 function tryDomParse(platforms) {
   for (const platform of platforms) {
+    if (!platform.enabled) continue
     const orders = parseOrdersFromDom(document, {
       rowSelector: platform.rowSelector,
       orderIdSelector: platform.orderIdSelector,
@@ -71,7 +72,8 @@ function handleNetworkPayload(platforms, url, body) {
   let urlMatched = false
   let extracted = false
   const urlStr = String(url || '')
-  for (const platform of platforms) {
+  const active = platforms.filter((p) => p.enabled)
+  for (const platform of active) {
     if (!platform.apiUrlIncludes || !urlStr.includes(platform.apiUrlIncludes)) continue
     urlMatched = true
     const orders = extractOrdersFromJson(body, platform.orderIdPath, platform.orderFields)
@@ -80,21 +82,33 @@ function handleNetworkPayload(platforms, url, body) {
       extracted = true
     }
   }
-  // 仅当 URL 命中 apiUrlIncludes 但 JSON 未抽出订单时，才回退 DOM
   if (urlMatched && !extracted) {
-    tryDomParse(platforms)
+    tryDomParse(active)
   }
 }
 
-function checkLogin(platforms) {
+function isLoginHref(platform, href) {
+  return Boolean(platform.loginUrlIncludes && href.includes(platform.loginUrlIncludes))
+}
+
+function syncLoginState(matchingPlatforms) {
   const href = location.href
-  for (const platform of platforms) {
-    if (platform.loginUrlIncludes && href.includes(platform.loginUrlIncludes)) {
+  for (const platform of matchingPlatforms) {
+    if (isLoginHref(platform, href)) {
+      if (platform.enabled) {
+        chrome.runtime
+          .sendMessage({
+            type: MSG.LOGIN_DETECTED,
+            platformId: platform.id,
+            href,
+          })
+          .catch(() => {})
+      }
+    } else if (platform.pausedByLogin) {
       chrome.runtime
         .sendMessage({
-          type: MSG.LOGIN_DETECTED,
+          type: MSG.RESUME_PLATFORM,
           platformId: platform.id,
-          href,
         })
         .catch(() => {})
     }
@@ -102,15 +116,20 @@ function checkLogin(platforms) {
 }
 
 async function main() {
-  console.log('[order-monitor] content script loaded', location.href)
+  const href = location.href
+  const syncHits = configuredBuiltins().filter((p) => hrefMatchesPlatform(p, href))
+
+  // 同步命中内置规则时立刻挂钩，尽量赶上首屏请求
+  if (syncHits.length) {
+    injectNetworkHookSync()
+  }
 
   let platforms = []
+  let matchingAll = []
   let platformsReady = false
   const pendingPayloads = []
 
-  // 在 await storage / 注入钩子之前挂上 listener，避免早期 NETWORK_PAYLOAD 丢失
-  window.addEventListener('message', (event) => {
-    // 仅处理同源 page-world 钩子消息，避免跨站伪造
+  const onMessage = (event) => {
     if (event.source !== window) return
     const data = event.data
     if (!data || data.source !== HOOK_SOURCE || data.type !== 'NETWORK_PAYLOAD') return
@@ -120,17 +139,34 @@ async function main() {
     }
     if (!platforms.length) return
     handleNetworkPayload(platforms, data.url, data.body)
-  })
-
-  platforms = await loadMatchingPlatforms()
-  platformsReady = true
-
-  // 未匹配平台时不改写页面 fetch/XHR
-  if (platforms.length) {
-    await injectNetworkHook()
   }
 
-  checkLogin(platforms)
+  // 仅在有希望成为目标页时挂监听（内置同步命中，或稍后 storage 命中）
+  let listening = false
+  function ensureListening() {
+    if (listening) return
+    window.addEventListener('message', onMessage)
+    listening = true
+  }
+
+  if (syncHits.length) ensureListening()
+
+  const stored = await loadStoragePlatforms()
+  matchingAll = stored.filter((p) => hrefMatchesPlatform(p, href))
+  platforms = matchingAll.filter((p) => p.enabled)
+
+  // 非目标页：不做后续工作
+  if (!syncHits.length && !matchingAll.length) {
+    return
+  }
+
+  ensureListening()
+  if (!window.__orderMonitorHookInstalled && matchingAll.length) {
+    injectNetworkHookSync()
+  }
+
+  platformsReady = true
+  syncLoginState(matchingAll)
 
   for (const payload of pendingPayloads.splice(0)) {
     if (!platforms.length) break
@@ -139,13 +175,14 @@ async function main() {
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.platforms) return
-    loadMatchingPlatforms().then(async (next) => {
-      const had = platforms.length > 0
-      platforms = next
-      if (!had && platforms.length) {
-        await injectNetworkHook()
+    loadStoragePlatforms().then((list) => {
+      matchingAll = list.filter((p) => hrefMatchesPlatform(p, location.href))
+      platforms = matchingAll.filter((p) => p.enabled)
+      if (matchingAll.length) {
+        ensureListening()
+        if (!window.__orderMonitorHookInstalled) injectNetworkHookSync()
       }
-      checkLogin(platforms)
+      syncLoginState(matchingAll)
     })
   })
 

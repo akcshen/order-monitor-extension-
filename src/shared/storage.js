@@ -36,6 +36,7 @@ export async function syncBuiltinPlatforms() {
     const normalized = normalizeBuiltinPlatform(draft, {
       preserveEnabled: Boolean(prev),
       previousEnabled: prev?.enabled,
+      previousPausedByLogin: prev?.pausedByLogin,
     })
     byId.set(draft.id, normalized)
   }

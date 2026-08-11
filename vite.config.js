@@ -1,12 +1,18 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { crx } from '@crxjs/vite-plugin'
-import { defineManifest } from '@crxjs/vite-plugin'
+import { crx, defineManifest } from '@crxjs/vite-plugin'
+import { BUILTIN_PLATFORMS } from './src/shared/builtin-platforms.js'
+import { collectChromeMatchPatterns } from './src/shared/builtin-platform-utils.js'
+
+const builtinMatches = collectChromeMatchPatterns(BUILTIN_PLATFORMS)
+// 未配置真实 URL 时仍用全站匹配，方便开发；配置后自动收窄到目标域名
+const pageMatches =
+  builtinMatches.length > 0 ? builtinMatches : ['http://*/*', 'https://*/*']
 
 const manifest = defineManifest({
   manifest_version: 3,
   name: '订单监控助手',
-  version: '0.1.0',
+  version: '0.1.1',
   description: '多平台新订单监控并邮件通知',
   action: {
     default_popup: 'index.html',
@@ -17,10 +23,10 @@ const manifest = defineManifest({
     type: 'module',
   },
   permissions: ['storage', 'alarms', 'tabs', 'notifications', 'scripting'],
-  host_permissions: ['http://*/*', 'https://*/*'],
+  host_permissions: pageMatches,
   content_scripts: [
     {
-      matches: ['http://*/*', 'https://*/*'],
+      matches: pageMatches,
       js: ['src/content/main.js'],
       run_at: 'document_start',
     },
@@ -28,7 +34,7 @@ const manifest = defineManifest({
   web_accessible_resources: [
     {
       resources: ['src/injected/network-hook.js'],
-      matches: ['http://*/*', 'https://*/*'],
+      matches: pageMatches,
     },
   ],
   icons: {

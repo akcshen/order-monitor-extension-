@@ -1,12 +1,17 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { MSG } from '../../shared/messaging.js'
 
 const props = defineProps({
   platforms: { type: Array, default: () => [] },
   mailLogs: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(['changed'])
+
 const tabOpenMap = ref({})
+const resumingId = ref('')
 
 function startOfToday() {
   const d = new Date()
@@ -42,6 +47,26 @@ async function refreshTabStatus() {
   }
 }
 
+async function onResume(p) {
+  resumingId.value = p.id
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: MSG.RESUME_PLATFORM,
+      platformId: p.id,
+    })
+    if (!res?.ok) {
+      ElMessage.error(res?.error || '恢复失败')
+      return
+    }
+    ElMessage.success(`已恢复「${p.name || p.id}」`)
+    emit('changed')
+  } catch (e) {
+    ElMessage.error(e.message || '恢复失败')
+  } finally {
+    resumingId.value = ''
+  }
+}
+
 watch(
   () => props.platforms,
   () => refreshTabStatus(),
@@ -57,24 +82,45 @@ watch(
       :image-size="48"
     />
     <div v-for="p in platforms" :key="p.id" class="row">
-      <div class="name">
-        {{ p.name || p.id }}
-        <el-tag :type="p.enabled ? 'success' : 'info'" size="small">
-          {{ p.enabled ? '启用' : '暂停' }}
-        </el-tag>
+      <div class="main">
+        <div class="name">
+          {{ p.name || p.id }}
+          <el-tag :type="p.enabled ? 'success' : 'warning'" size="small">
+            {{ p.enabled ? '启用' : p.pausedByLogin ? '登录暂停' : '暂停' }}
+          </el-tag>
+        </div>
+        <div class="sub">
+          今日新单 {{ todayNewCount(p.id) }} · 页面 {{ tabOpenMap[p.id] ? '已打开' : '未打开' }}
+        </div>
       </div>
-      <div class="sub">今日新单 {{ todayNewCount(p.id) }} · 页面 {{ tabOpenMap[p.id] ? '已打开' : '未打开' }}</div>
+      <el-button
+        v-if="!p.enabled || p.pausedByLogin"
+        size="small"
+        type="primary"
+        plain
+        :loading="resumingId === p.id"
+        @click="onResume(p)"
+      >
+        恢复
+      </el-button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 0;
   border-bottom: 1px solid #ebeef5;
 }
 .row:last-child {
   border-bottom: none;
+}
+.main {
+  flex: 1;
+  min-width: 0;
 }
 .name {
   display: flex;
