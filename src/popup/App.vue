@@ -135,7 +135,7 @@ onMounted(loadState)
     </section>
 
     <section class="section">
-      <h2>平台规则</h2>
+      <h2>监控配置</h2>
       <PlatformList
         :platforms="state.platforms"
         :mail-logs="state.mailLogs"

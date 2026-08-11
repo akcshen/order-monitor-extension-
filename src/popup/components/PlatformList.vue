@@ -109,7 +109,7 @@ function onRemoved() {
 <template>
   <div class="platform-list">
     <div class="toolbar">
-      <span class="count">共 {{ platforms.length }} 个平台</span>
+      <span class="count">共 {{ platforms.length }} 条</span>
       <el-button type="primary" size="small" @click="openAdd">新增配置</el-button>
     </div>
 
