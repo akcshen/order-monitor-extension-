@@ -49,18 +49,20 @@ function tryDomParse(platforms) {
 }
 
 function handleNetworkPayload(platforms, url, body) {
+  let urlMatched = false
   let extracted = false
   const urlStr = String(url || '')
   for (const platform of platforms) {
     if (!platform.apiUrlIncludes || !urlStr.includes(platform.apiUrlIncludes)) continue
+    urlMatched = true
     const orders = extractOrdersFromJson(body, platform.orderIdPath, platform.orderFields)
     if (orders.length) {
       sendOrders(platform.id, orders, 'api')
       extracted = true
     }
   }
-  // API 未抽出订单时回退 DOM
-  if (!extracted) {
+  // 仅当 URL 命中 apiUrlIncludes 但 JSON 未抽出订单时，才回退 DOM
+  if (urlMatched && !extracted) {
     tryDomParse(platforms)
   }
 }
@@ -84,8 +86,32 @@ async function main() {
   injectNetworkHook()
   console.log('[order-monitor] content script loaded', location.href)
 
-  let platforms = await loadMatchingPlatforms()
+  let platforms = []
+  let platformsReady = false
+  const pendingPayloads = []
+
+  // 在 await storage 之前挂上 listener，避免早期 NETWORK_PAYLOAD 丢失
+  window.addEventListener('message', (event) => {
+    // 仅处理同源 page-world 钩子消息，避免跨站伪造
+    if (event.source !== window) return
+    const data = event.data
+    if (!data || data.source !== HOOK_SOURCE || data.type !== 'NETWORK_PAYLOAD') return
+    if (!platformsReady) {
+      pendingPayloads.push({ url: data.url, body: data.body })
+      return
+    }
+    if (!platforms.length) return
+    handleNetworkPayload(platforms, data.url, data.body)
+  })
+
+  platforms = await loadMatchingPlatforms()
+  platformsReady = true
   checkLogin(platforms)
+
+  for (const payload of pendingPayloads.splice(0)) {
+    if (!platforms.length) break
+    handleNetworkPayload(platforms, payload.url, payload.body)
+  }
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.platforms) return
@@ -93,15 +119,6 @@ async function main() {
       platforms = next
       checkLogin(platforms)
     })
-  })
-
-  window.addEventListener('message', (event) => {
-    // 仅处理同源 page-world 钩子消息，避免跨站伪造
-    if (event.source !== window) return
-    const data = event.data
-    if (!data || data.source !== HOOK_SOURCE || data.type !== 'NETWORK_PAYLOAD') return
-    if (!platforms.length) return
-    handleNetworkPayload(platforms, data.url, data.body)
   })
 
   const runDomWhenReady = () => {
