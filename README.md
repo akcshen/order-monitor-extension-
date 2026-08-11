@@ -36,7 +36,33 @@ npm run build
 2. 开启右上角「开发者模式」
 3. 点击「加载已解压的扩展程序」
 4. 选择项目根目录下的 `dist/` 文件夹
-5. 点击工具栏扩展图标，打开 Popup：用户只需填**收件邮箱**与监控配置
+5. 点击工具栏扩展图标：用户只需填**收件邮箱**并打开监控开关
+
+## 内置监控规则（开发者）
+
+规则写在包内，用户不能改。编辑：
+
+`src/shared/builtin-platforms.js`
+
+```js
+{
+  id: 'builtin-main',           // 稳定唯一，不要随便改
+  name: '主订货后台',
+  enabled: true,
+  orderListUrl: 'https://真实后台/orders',   // 访问路径
+  apiUrlIncludes: '/api/order/list',         // 接口地址片段
+  orderIdPath: 'data.list[].orderNo',
+  orderFields: [
+    { label: '超市', path: 'shopName' },
+    { label: '金额', path: 'amount' },
+  ],
+  refreshSeconds: 60,
+}
+```
+
+把示例里的 `REPLACE_ME` 换成真实地址后执行 `npm run build`。未替换的条目**不会**同步进扩展（避免误监控）。
+
+安装/启动扩展时会自动把内置规则同步到本地；若用户因登录失败被暂停，会保留其 `enabled` 状态。
 
 ## 发信配置（开发者）
 
@@ -55,53 +81,22 @@ npm run build
 2. 写入 `.env.local`（已在 `.gitignore`，勿提交公开仓库）  
 3. 重新 `npm run build` 后加载 `dist`  
 
-## 用户侧邮件设置
+## 用户侧设置
 
-在 Popup「设置」中只需填写：
+在 Popup「设置」中只需：
 
-- **收件邮箱**：厂房侧接收新订单通知的地址  
-- （可选）总开关、合并发信、自动打开订单列表  
+- **监控开关**
+- **收件邮箱**
 
-然后「保存设置」→「发送测试邮件」。
+然后「保存」→「发送测试邮件」。监控状态区只读展示内置规则是否启用、页面是否打开。
 
 > **安全提醒：** API Key 会打进扩展包，解包仍可能被取出。仅分发给可信使用方；泄露后请立即在 Resend 撤销 Key。
 
-## 配置平台规则示例
+## 配置示例（联调）
 
-以下示例用于本地联调：用 `npx serve .` 在项目根目录起一个静态服务（如 `http://127.0.0.1:3000`），并创建测试页 `demo/orders.html`，页面内用 `fetch` 返回 JSON：
+本地可用 `npx serve .` 起静态服务，并准备 `demo/orders.html` + JSON。开发者在 `builtin-platforms.js` 写入对应访问路径与接口片段后打包即可，**无需**在 Popup 里再配规则。
 
-```html
-<!-- demo/orders.html 示例 -->
-<script>
-fetch('/api/orders.json').then(r => r.json())
-</script>
-```
-
-```json
-// demo/api/orders.json
-{
-  "data": {
-    "list": [
-      { "orderNo": "ORD-001", "shopName": "测试超市", "amount": "128.00" }
-    ]
-  }
-}
-```
-
-在 Popup「监控配置」中新增一条，核心只需两样：
-
-| 字段 | 含义 | 示例值 |
-|------|------|--------|
-| **访问路径** | 订单列表页完整 URL（定时打开/刷新） | `http://127.0.0.1:3000/demo/orders.html` |
-| **接口地址** | 订单列表接口 URL 中可识别的一段 | `/api/orders.json` |
-| 名称 | 显示名 | 本地 Demo |
-| 刷新间隔（秒） | 定时刷新 | 60 |
-| 订单号 JSON 路径 | 响应里订单号位置（须含 `[]`） | `data.list[].orderNo` |
-| 邮件字段 | path **相对单条订单**：如 `shopName` | `门店` → `shopName` |
-
-保存时会根据「访问路径」自动生成匹配规则，**不必再手填 matchUrls**。
-
-**DOM 兜底**（无接口时）：在「高级选项」里配行选择器 / 订单号选择器。
+**DOM 兜底**：在内置规则里填 `rowSelector` / `orderIdSelector` 等字段（见 `builtin-platforms.js` 选填项）。
 
 ## 首次运行与基线
 

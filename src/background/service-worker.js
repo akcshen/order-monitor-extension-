@@ -7,6 +7,7 @@ import {
   setSettings,
   upsertPlatform,
   removePlatform,
+  syncBuiltinPlatforms,
 } from '../shared/storage.js'
 import { diffNewOrders } from '../shared/orders.js'
 import { buildOrderEmail } from '../shared/email.js'
@@ -26,12 +27,25 @@ function mailSendArgs(toEmail, mail) {
   }
 }
 
+async function bootstrap() {
+  await syncBuiltinPlatforms()
+  await syncAlarms()
+}
+
 async function syncAlarms() {
   const { platforms } = await getState()
   await ensurePlatformAlarms(platforms)
 }
 
-chrome.runtime.onInstalled.addListener(syncAlarms)
+chrome.runtime.onInstalled.addListener(() => {
+  bootstrap().catch((e) => console.warn('[order-monitor] bootstrap', e))
+})
+chrome.runtime.onStartup?.addListener?.(() => {
+  bootstrap().catch((e) => console.warn('[order-monitor] bootstrap', e))
+})
+// MV3 SW 冷启动也尽量同步一次
+bootstrap().catch(() => {})
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.platforms) syncAlarms()
 })

@@ -4,12 +4,13 @@ import { ElMessage } from 'element-plus'
 import { MSG } from '../shared/messaging.js'
 import { DEFAULT_SETTINGS } from '../shared/types.js'
 import SettingsForm from './components/SettingsForm.vue'
-import PlatformList from './components/PlatformList.vue'
+import MonitorStatus from './components/MonitorStatus.vue'
 import MailLogList from './components/MailLogList.vue'
 
 const loading = ref(true)
 const testing = ref(false)
 const retrying = ref(false)
+const showAdvanced = ref(false)
 
 const state = reactive({
   settings: { ...DEFAULT_SETTINGS },
@@ -28,12 +29,12 @@ async function refreshLists() {
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.GET_STATE })
     if (!res?.ok) {
-      ElMessage.error(res?.error || '加载状态失败')
+      ElMessage.error(res?.error || '加载失败')
       return
     }
     applyListState(res)
   } catch (e) {
-    ElMessage.error(e.message || '加载状态失败')
+    ElMessage.error(e.message || '加载失败')
   }
 }
 
@@ -42,13 +43,13 @@ async function loadState() {
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.GET_STATE })
     if (!res?.ok) {
-      ElMessage.error(res?.error || '加载状态失败')
+      ElMessage.error(res?.error || '加载失败')
       return
     }
     state.settings = { ...DEFAULT_SETTINGS, ...(res.settings || {}) }
     applyListState(res)
   } catch (e) {
-    ElMessage.error(e.message || '加载状态失败')
+    ElMessage.error(e.message || '加载失败')
   } finally {
     loading.value = false
   }
@@ -59,9 +60,7 @@ async function saveSettings() {
     type: MSG.SAVE_SETTINGS,
     payload: { ...state.settings },
   })
-  if (!res?.ok) {
-    throw new Error(res?.error || '保存失败')
-  }
+  if (!res?.ok) throw new Error(res?.error || '保存失败')
   state.settings = { ...DEFAULT_SETTINGS, ...(res.settings || state.settings) }
   return res
 }
@@ -97,11 +96,8 @@ async function onRetryPending() {
       return
     }
     const remaining = res.remaining ?? 0
-    if (remaining === 0) {
-      ElMessage.success('待补发已全部重试成功')
-    } else {
-      ElMessage.warning(`仍有 ${remaining} 条待补发`)
-    }
+    if (remaining === 0) ElMessage.success('待补发已全部重试成功')
+    else ElMessage.warning(`仍有 ${remaining} 条待补发`)
     await refreshLists()
   } catch (e) {
     ElMessage.error(e.message || '重试失败')
@@ -123,51 +119,53 @@ onMounted(loadState)
     </header>
 
     <section class="section">
-      <h2>邮件与总设置</h2>
+      <h2>设置</h2>
       <SettingsForm v-model="state.settings" @saved="onSettingsSaved" />
-    </section>
-
-    <section class="section">
-      <h2>测试发信</h2>
-      <el-button type="primary" plain style="width: 100%" :loading="testing" @click="onTestEmail">
+      <el-button
+        type="primary"
+        plain
+        style="width: 100%; margin-top: 8px"
+        :loading="testing"
+        @click="onTestEmail"
+      >
         发送测试邮件
       </el-button>
     </section>
 
     <section class="section">
-      <h2>监控配置</h2>
-      <PlatformList
-        :platforms="state.platforms"
-        :mail-logs="state.mailLogs"
-        @changed="refreshLists"
-      />
+      <h2>监控状态</h2>
+      <MonitorStatus :platforms="state.platforms" :mail-logs="state.mailLogs" />
     </section>
 
-    <section class="section">
-      <h2>最近邮件日志</h2>
-      <MailLogList :mail-logs="state.mailLogs" :platforms="state.platforms" />
-    </section>
+    <el-button text type="primary" @click="showAdvanced = !showAdvanced">
+      {{ showAdvanced ? '收起明细' : '查看日志 / 待补发' }}
+    </el-button>
 
-    <section class="section">
-      <h2>待补发</h2>
-      <p class="hint">当前队列：{{ state.pendingMails.length }} 条</p>
-      <el-button
-        type="warning"
-        style="width: 100%"
-        :disabled="!state.pendingMails.length"
-        :loading="retrying"
-        @click="onRetryPending"
-      >
-        重试待补发
-      </el-button>
-    </section>
+    <template v-if="showAdvanced">
+      <section class="section">
+        <h2>最近邮件日志</h2>
+        <MailLogList :mail-logs="state.mailLogs" :platforms="state.platforms" />
+      </section>
+      <section class="section">
+        <h2>待补发（{{ state.pendingMails.length }}）</h2>
+        <el-button
+          type="warning"
+          style="width: 100%"
+          :disabled="!state.pendingMails.length"
+          :loading="retrying"
+          @click="onRetryPending"
+        >
+          重试待补发
+        </el-button>
+      </section>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .popup-app {
-  width: 420px;
-  max-height: 600px;
+  width: 360px;
+  max-height: 560px;
   overflow: auto;
   padding: 12px 14px 16px;
   box-sizing: border-box;
@@ -197,10 +195,5 @@ onMounted(loadState)
   font-size: 13px;
   font-weight: 600;
   color: #606266;
-}
-.hint {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: #909399;
 }
 </style>

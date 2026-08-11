@@ -4,6 +4,8 @@ import {
   DEFAULT_MAIL_LOGS,
   DEFAULT_PENDING,
 } from './types.js'
+import { BUILTIN_PLATFORMS } from './builtin-platforms.js'
+import { normalizeBuiltinPlatform } from './builtin-platform-utils.js'
 
 const KEYS = {
   settings: 'settings',
@@ -11,6 +13,40 @@ const KEYS = {
   seenOrders: 'seenOrders',
   mailLogs: 'mailLogs',
   pendingMails: 'pendingMails',
+}
+
+/**
+ * 将包内内置规则同步到 storage。
+ * - 内置 id：用包内配置覆盖规则字段，但保留用户侧的 enabled（登录暂停等）
+ * - 非内置自定义规则：保留不动
+ * - orderListUrl 仍含 REPLACE_ME 的条目跳过（未配置）
+ */
+export async function syncBuiltinPlatforms() {
+  const { platforms: existing } = await getState()
+  const byId = new Map(existing.map((p) => [p.id, p]))
+  const builtinIds = new Set()
+
+  for (const draft of BUILTIN_PLATFORMS) {
+    if (!draft?.id) continue
+    const url = String(draft.orderListUrl || '')
+    if (!url || url.includes('REPLACE_ME')) continue
+
+    builtinIds.add(draft.id)
+    const prev = byId.get(draft.id)
+    const normalized = normalizeBuiltinPlatform(draft, {
+      preserveEnabled: Boolean(prev),
+      previousEnabled: prev?.enabled,
+    })
+    byId.set(draft.id, normalized)
+  }
+
+  // 非内置自定义保留；已从包内删除的旧 builtin 丢弃
+  const customs = existing.filter((p) => !builtinIds.has(p.id) && !p.builtin)
+  const builtins = BUILTIN_PLATFORMS.map((d) => byId.get(d.id)).filter(Boolean)
+  const ordered = [...builtins, ...customs]
+
+  await chrome.storage.local.set({ [KEYS.platforms]: ordered })
+  return ordered
 }
 
 export async function getState() {
