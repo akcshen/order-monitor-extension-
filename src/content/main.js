@@ -31,12 +31,15 @@ async function injectNetworkHook() {
 async function loadMatchingPlatforms() {
   const { platforms = [] } = await chrome.storage.local.get('platforms')
   const href = location.href
-  return platforms.filter(
-    (p) =>
-      p?.enabled &&
-      Array.isArray(p.matchUrls) &&
-      p.matchUrls.some((pattern) => urlMatches(pattern, href)),
-  )
+  return platforms.filter((p) => {
+    if (!p?.enabled) return false
+    const patterns = Array.isArray(p.matchUrls) ? p.matchUrls.filter(Boolean) : []
+    if (patterns.some((pattern) => urlMatches(pattern, href))) return true
+    // 兼容：仅配了访问路径、尚未生成 matchUrls 的旧数据
+    const page = (p.orderListUrl || '').trim()
+    if (page && (href === page || href.startsWith(page.split('?')[0]))) return true
+    return false
+  })
 }
 
 function sendOrders(platformId, orders, source) {

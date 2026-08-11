@@ -110,10 +110,10 @@ function onRemoved() {
   <div class="platform-list">
     <div class="toolbar">
       <span class="count">共 {{ platforms.length }} 个平台</span>
-      <el-button type="primary" size="small" @click="openAdd">新增平台</el-button>
+      <el-button type="primary" size="small" @click="openAdd">新增配置</el-button>
     </div>
 
-    <el-empty v-if="!platforms.length" description="暂无平台，请新增" :image-size="48" />
+    <el-empty v-if="!platforms.length" description="暂无监控配置，请新增" :image-size="48" />
 
     <div v-for="p in platforms" :key="p.id" class="platform-row">
       <div class="meta">
@@ -123,10 +123,13 @@ function onRemoved() {
             {{ p.enabled ? '启用' : '停用' }}
           </el-tag>
         </div>
+        <div class="sub" :title="(p.orderListUrl || '') + ' | ' + (p.apiUrlIncludes || '')">
+          访问：{{ p.orderListUrl || '未填' }}
+        </div>
         <div class="sub">
-          今日新单 {{ todayNewCount(p.id) }}
-          · 监控页 {{ tabOpenMap[p.id] ? '已打开' : '未打开' }}
-          · 刷新 {{ p.refreshSeconds || 60 }}s
+          接口：{{ p.apiUrlIncludes || '未填' }}
+          · 今日新单 {{ todayNewCount(p.id) }}
+          · 页 {{ tabOpenMap[p.id] ? '已开' : '未开' }}
         </div>
       </div>
       <el-switch

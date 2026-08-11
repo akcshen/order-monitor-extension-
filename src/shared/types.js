@@ -8,14 +8,21 @@ export const DEFAULT_SETTINGS = {
   autoOpenOrderListTab: true,
 }
 
+/**
+ * 一条监控配置。
+ * 用户主要填：orderListUrl（访问路径）+ apiUrlIncludes（接口地址）。
+ * matchUrls 由访问路径自动推导，一般无需手填。
+ */
 export function createEmptyPlatform() {
   return {
     id: crypto.randomUUID(),
     name: '',
     enabled: true,
     matchUrls: [],
+    /** 访问路径：订单列表页 URL */
     orderListUrl: '',
     refreshSeconds: 60,
+    /** 接口地址：订单接口 URL 需包含的片段 */
     apiUrlIncludes: '',
     orderIdPath: '',
     orderFields: [],
