@@ -173,10 +173,11 @@ async function onRemove() {
       <el-form-item label="订单号路径">
         <el-input v-model="form.orderIdPath" placeholder="data.list[].orderNo" clearable />
       </el-form-item>
-      <el-form-item label="订单字段（label + path）">
+      <el-form-item label="订单字段（相对单条订单行的 path）">
+        <p class="field-hint">path 相对订单行，如 shopName、amount；勿写 data.list[].shopName</p>
         <div v-for="(f, i) in form.orderFields" :key="'of-' + i" class="row-pair">
-          <el-input v-model="f.label" placeholder="label" />
-          <el-input v-model="f.path" placeholder="path" />
+          <el-input v-model="f.label" placeholder="门店" />
+          <el-input v-model="f.path" placeholder="shopName" />
           <el-button text type="danger" @click="removeOrderField(i)">删</el-button>
         </div>
         <el-button size="small" @click="addOrderField">添加字段</el-button>
@@ -199,7 +200,11 @@ async function onRemove() {
       </el-form-item>
 
       <el-form-item label="登录页 URL 包含">
-        <el-input v-model="form.loginUrlIncludes" placeholder="login" clearable />
+        <el-input
+          v-model="form.loginUrlIncludes"
+          placeholder="可选，如 /login；空则不检测"
+          clearable
+        />
       </el-form-item>
     </el-form>
 
@@ -220,6 +225,12 @@ async function onRemove() {
   grid-template-columns: 1fr 1fr auto;
   gap: 6px;
   margin-bottom: 6px;
+}
+.field-hint {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.4;
 }
 .footer {
   display: flex;

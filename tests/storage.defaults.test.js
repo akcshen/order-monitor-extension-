@@ -31,5 +31,6 @@ describe('defaults', () => {
     expect(p.refreshSeconds).toBe(60)
     expect(p.orderFields).toEqual([])
     expect(p.fieldSelectors).toEqual([])
+    expect(p.loginUrlIncludes).toBe('')
   })
 })

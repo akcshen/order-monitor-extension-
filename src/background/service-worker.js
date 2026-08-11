@@ -34,6 +34,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   await refreshPlatformTab(platform, settings.autoOpenOrderListTab)
 })
 
+/** 串行化 ORDERS_CANDIDATES，避免 API+DOM 并发交错 getState/diff/saveSeen */
+let candidatesChain = Promise.resolve()
+
+function enqueueCandidates(message) {
+  const run = candidatesChain.then(() => handleCandidates(message))
+  candidatesChain = run.then(
+    () => {},
+    () => {},
+  )
+  return run
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   handleMessage(message)
     .then(sendResponse)
@@ -56,7 +68,7 @@ async function handleMessage(message) {
       await syncAlarms()
       return { ok: true }
     case MSG.ORDERS_CANDIDATES:
-      return handleCandidates(message)
+      return enqueueCandidates(message)
     case MSG.LOGIN_DETECTED:
       return handleLoginDetected(message)
     case MSG.TEST_EMAIL:

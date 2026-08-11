@@ -16,8 +16,13 @@ export function diffNewOrders(seen, platformId, orders) {
     }
   }
 
-  const newOrders = orders.filter((o) => o.orderId && !idSet.has(o.orderId))
-  for (const o of newOrders) idSet.add(o.orderId)
+  const newOrders = []
+  for (const o of orders) {
+    if (!o.orderId || idSet.has(o.orderId)) continue
+    // 同批内重复 orderId 只接受第一条
+    idSet.add(o.orderId)
+    newOrders.push(o)
+  }
   const ids = [...idSet].slice(-MAX_IDS)
   return {
     newOrders,

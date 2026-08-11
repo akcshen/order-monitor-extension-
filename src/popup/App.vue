@@ -136,7 +136,11 @@ onMounted(loadState)
 
     <section class="section">
       <h2>平台规则</h2>
-      <PlatformList :platforms="state.platforms" @changed="refreshLists" />
+      <PlatformList
+        :platforms="state.platforms"
+        :mail-logs="state.mailLogs"
+        @changed="refreshLists"
+      />
     </section>
 
     <section class="section">

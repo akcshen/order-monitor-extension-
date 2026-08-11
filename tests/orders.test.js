@@ -22,4 +22,20 @@ describe('diffNewOrders', () => {
     expect(newOrders).toEqual([{ orderId: '3', fields: { 超市: '永辉' } }])
     expect(nextSeen.p1.ids).toContain('3')
   })
+
+  it('dedupes duplicate orderIds within the same batch', () => {
+    const seen = { p1: { ids: ['1'], baselineReady: true } }
+    const { newOrders, nextSeen } = diffNewOrders(seen, 'p1', [
+      { orderId: '2', fields: { 来源: 'a' } },
+      { orderId: '2', fields: { 来源: 'b' } },
+      { orderId: '3', fields: {} },
+      { orderId: '3', fields: { 来源: 'dup' } },
+    ])
+    expect(newOrders).toEqual([
+      { orderId: '2', fields: { 来源: 'a' } },
+      { orderId: '3', fields: {} },
+    ])
+    expect(nextSeen.p1.ids.filter((id) => id === '2')).toHaveLength(1)
+    expect(nextSeen.p1.ids.filter((id) => id === '3')).toHaveLength(1)
+  })
 })

@@ -5,11 +5,27 @@ import { parseOrdersFromDom } from './dom-parser.js'
 
 const HOOK_SOURCE = 'order-monitor-hook'
 
-function injectNetworkHook() {
-  const s = document.createElement('script')
-  s.src = chrome.runtime.getURL('src/injected/network-hook.js')
-  ;(document.documentElement || document.head).appendChild(s)
-  s.remove()
+/**
+ * 优先同步注入（textContent），尽快挂钩 fetch/XHR；
+ * 若页面 CSP / 环境禁止 inline，再回退 script.src。
+ */
+async function injectNetworkHook() {
+  const url = chrome.runtime.getURL('src/injected/network-hook.js')
+  try {
+    const code = await fetch(url).then((r) => {
+      if (!r.ok) throw new Error(`hook fetch ${r.status}`)
+      return r.text()
+    })
+    const s = document.createElement('script')
+    s.textContent = code
+    ;(document.documentElement || document.head).appendChild(s)
+    s.remove()
+  } catch (_) {
+    const s = document.createElement('script')
+    s.src = url
+    ;(document.documentElement || document.head).appendChild(s)
+    s.remove()
+  }
 }
 
 async function loadMatchingPlatforms() {
@@ -83,14 +99,13 @@ function checkLogin(platforms) {
 }
 
 async function main() {
-  injectNetworkHook()
   console.log('[order-monitor] content script loaded', location.href)
 
   let platforms = []
   let platformsReady = false
   const pendingPayloads = []
 
-  // 在 await storage 之前挂上 listener，避免早期 NETWORK_PAYLOAD 丢失
+  // 在 await storage / 注入钩子之前挂上 listener，避免早期 NETWORK_PAYLOAD 丢失
   window.addEventListener('message', (event) => {
     // 仅处理同源 page-world 钩子消息，避免跨站伪造
     if (event.source !== window) return
@@ -106,6 +121,12 @@ async function main() {
 
   platforms = await loadMatchingPlatforms()
   platformsReady = true
+
+  // 未匹配平台时不改写页面 fetch/XHR
+  if (platforms.length) {
+    await injectNetworkHook()
+  }
+
   checkLogin(platforms)
 
   for (const payload of pendingPayloads.splice(0)) {
@@ -115,8 +136,12 @@ async function main() {
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.platforms) return
-    loadMatchingPlatforms().then((next) => {
+    loadMatchingPlatforms().then(async (next) => {
+      const had = platforms.length > 0
       platforms = next
+      if (!had && platforms.length) {
+        await injectNetworkHook()
+      }
       checkLogin(platforms)
     })
   })

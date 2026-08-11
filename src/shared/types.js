@@ -22,7 +22,7 @@ export function createEmptyPlatform() {
     rowSelector: '',
     orderIdSelector: '',
     fieldSelectors: [],
-    loginUrlIncludes: 'login',
+    loginUrlIncludes: '',
   }
 }
 

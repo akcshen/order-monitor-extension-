@@ -1,12 +1,16 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { MSG } from '../../shared/messaging.js'
 import { createEmptyPlatform } from '../../shared/types.js'
 import PlatformEditor from './PlatformEditor.vue'
 
-defineProps({
+const props = defineProps({
   platforms: {
+    type: Array,
+    default: () => [],
+  },
+  mailLogs: {
     type: Array,
     default: () => [],
   },
@@ -17,6 +21,51 @@ const emit = defineEmits(['changed'])
 const editorOpen = ref(false)
 const editing = ref(null)
 const isNew = ref(false)
+/** platformId -> 是否有匹配 orderListUrl 的标签页 */
+const tabOpenMap = ref({})
+
+function startOfToday() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/** 今日该平台新单约数：汇总当天 mailLogs 中的 orderIds 数量 */
+function todayNewCount(platformId) {
+  const start = startOfToday()
+  let n = 0
+  for (const log of props.mailLogs) {
+    if (log.platformId !== platformId || !log.at || log.at < start) continue
+    n += Array.isArray(log.orderIds) ? log.orderIds.length : 0
+  }
+  return n
+}
+
+async function refreshTabStatus() {
+  try {
+    const tabs = await chrome.tabs.query({})
+    const map = {}
+    for (const p of props.platforms) {
+      if (!p.orderListUrl) {
+        map[p.id] = false
+        continue
+      }
+      const base = p.orderListUrl.split('?')[0]
+      map[p.id] = tabs.some((t) => t.url && t.url.startsWith(base))
+    }
+    tabOpenMap.value = map
+  } catch (_) {
+    tabOpenMap.value = {}
+  }
+}
+
+watch(
+  () => props.platforms,
+  () => {
+    refreshTabStatus()
+  },
+  { immediate: true, deep: true },
+)
 
 function openAdd() {
   editing.value = createEmptyPlatform()
@@ -68,10 +117,16 @@ function onRemoved() {
 
     <div v-for="p in platforms" :key="p.id" class="platform-row">
       <div class="meta">
-        <div class="name">{{ p.name || '(未命名)' }}</div>
+        <div class="name">
+          {{ p.name || '(未命名)' }}
+          <el-tag :type="p.enabled ? 'success' : 'info'" size="small" class="status-tag">
+            {{ p.enabled ? '启用' : '停用' }}
+          </el-tag>
+        </div>
         <div class="sub">
-          刷新 {{ p.refreshSeconds || 60 }}s
-          <template v-if="p.orderListUrl"> · {{ p.orderListUrl }}</template>
+          今日新单 {{ todayNewCount(p.id) }}
+          · 监控页 {{ tabOpenMap[p.id] ? '已打开' : '未打开' }}
+          · 刷新 {{ p.refreshSeconds || 60 }}s
         </div>
       </div>
       <el-switch
@@ -115,9 +170,15 @@ function onRemoved() {
   border-bottom: none;
 }
 .name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
   color: #303133;
+}
+.status-tag {
+  font-weight: 400;
 }
 .sub {
   margin-top: 2px;
@@ -126,6 +187,6 @@ function onRemoved() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 260px;
+  max-width: 280px;
 }
 </style>

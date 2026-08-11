@@ -83,8 +83,8 @@ fetch('/api/orders.json').then(r => r.json())
 | 订单列表 URL | `http://127.0.0.1:3000/demo/orders.html` |
 | 刷新间隔（秒） | 60（UI 最小 15） |
 | API URL 包含 | `/api/orders.json` |
-| 订单号路径 | `data.list[].orderNo` |
-| 订单字段 | `门店` → `data.list[].shopName`；`金额` → `data.list[].amount` |
+| 订单号路径 | `data.list[].orderNo`（须含 `[]`，指向订单号数组） |
+| 订单字段 | path **相对单条订单行**：`门店` → `shopName`；`金额` → `amount`（不要写 `data.list[].shopName`） |
 
 **DOM 兜底模式**（关掉接口字段时）：配置「行选择器」「订单号选择器」及字段选择器，例如行 `.order-row`、订单号 `.order-id`，刷新页面后 content script 会解析 DOM 上报订单。
 
@@ -107,7 +107,7 @@ fetch('/api/orders.json').then(r => r.json())
 | `scripting` | 向匹配页面注入网络钩子脚本 |
 | `host_permissions: http(s)://*/*` | 在配置的订单站点运行 content script 与钩子 |
 
-Content script 仅在你在 Popup 中配置的 **匹配 URL** 对应站点上运行，不会向未匹配站点注入脚本。
+Manifest 中 content script 声明为 `http(s)://*/*`（便于多平台配置），但**仅当当前页 href 命中某启用平台的 `matchUrls` 时**才会注入 MAIN 世界网络钩子并改写 `fetch` / `XHR`；未匹配页面不会挂钩。钩子优先以 inline `textContent` 同步安装；若被页面 CSP 拦截则回退 `script.src`（需 `web_accessible_resources`）。
 
 ## 刷新间隔与 Chrome Alarm 限制
 
