@@ -18,6 +18,25 @@ const state = reactive({
   pendingMails: [],
 })
 
+function applyListState(res) {
+  state.platforms = Array.isArray(res.platforms) ? res.platforms : []
+  state.mailLogs = Array.isArray(res.mailLogs) ? res.mailLogs : []
+  state.pendingMails = Array.isArray(res.pendingMails) ? res.pendingMails : []
+}
+
+async function refreshLists() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: MSG.GET_STATE })
+    if (!res?.ok) {
+      ElMessage.error(res?.error || '加载状态失败')
+      return
+    }
+    applyListState(res)
+  } catch (e) {
+    ElMessage.error(e.message || '加载状态失败')
+  }
+}
+
 async function loadState() {
   loading.value = true
   try {
@@ -27,14 +46,24 @@ async function loadState() {
       return
     }
     state.settings = { ...DEFAULT_SETTINGS, ...(res.settings || {}) }
-    state.platforms = Array.isArray(res.platforms) ? res.platforms : []
-    state.mailLogs = Array.isArray(res.mailLogs) ? res.mailLogs : []
-    state.pendingMails = Array.isArray(res.pendingMails) ? res.pendingMails : []
+    applyListState(res)
   } catch (e) {
     ElMessage.error(e.message || '加载状态失败')
   } finally {
     loading.value = false
   }
+}
+
+async function saveSettings() {
+  const res = await chrome.runtime.sendMessage({
+    type: MSG.SAVE_SETTINGS,
+    payload: { ...state.settings },
+  })
+  if (!res?.ok) {
+    throw new Error(res?.error || '保存失败')
+  }
+  state.settings = { ...DEFAULT_SETTINGS, ...(res.settings || state.settings) }
+  return res
 }
 
 function onSettingsSaved(settings) {
@@ -44,10 +73,11 @@ function onSettingsSaved(settings) {
 async function onTestEmail() {
   testing.value = true
   try {
+    await saveSettings()
     const res = await chrome.runtime.sendMessage({ type: MSG.TEST_EMAIL })
     if (res?.ok) {
       ElMessage.success('测试邮件已发送')
-      await loadState()
+      await refreshLists()
     } else {
       ElMessage.error(res?.error || '测试发信失败')
     }
@@ -72,7 +102,7 @@ async function onRetryPending() {
     } else {
       ElMessage.warning(`仍有 ${remaining} 条待补发`)
     }
-    await loadState()
+    await refreshLists()
   } catch (e) {
     ElMessage.error(e.message || '重试失败')
   } finally {
@@ -94,7 +124,7 @@ onMounted(loadState)
 
     <section class="section">
       <h2>邮件与总设置</h2>
-      <SettingsForm :settings="state.settings" @saved="onSettingsSaved" />
+      <SettingsForm v-model="state.settings" @saved="onSettingsSaved" />
     </section>
 
     <section class="section">
@@ -106,7 +136,7 @@ onMounted(loadState)
 
     <section class="section">
       <h2>平台规则</h2>
-      <PlatformList :platforms="state.platforms" @changed="loadState" />
+      <PlatformList :platforms="state.platforms" @changed="refreshLists" />
     </section>
 
     <section class="section">
