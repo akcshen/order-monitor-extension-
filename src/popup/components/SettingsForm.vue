@@ -14,7 +14,12 @@ async function onSave() {
   try {
     const res = await chrome.runtime.sendMessage({
       type: MSG.SAVE_SETTINGS,
-      payload: { ...model.value },
+      payload: {
+        enabled: model.value.enabled,
+        toEmail: (model.value.toEmail || '').trim(),
+        mergeNewOrdersInOneEmail: model.value.mergeNewOrdersInOneEmail,
+        autoOpenOrderListTab: model.value.autoOpenOrderListTab,
+      },
     })
     if (!res?.ok) {
       ElMessage.error(res?.error || '保存失败')
@@ -35,23 +40,9 @@ async function onSave() {
     <el-form-item label="总开关">
       <el-switch v-model="model.enabled" active-text="监控中" inactive-text="已暂停" />
     </el-form-item>
-    <el-form-item label="Resend API Key">
-      <el-input
-        v-model="model.resendApiKey"
-        type="password"
-        show-password
-        placeholder="re_xxx"
-        clearable
-      />
-    </el-form-item>
-    <el-form-item label="收件邮箱">
-      <el-input v-model="model.toEmail" placeholder="you@example.com" clearable />
-    </el-form-item>
-    <el-form-item label="发件邮箱">
-      <el-input v-model="model.fromEmail" placeholder="noreply@your-domain.com" clearable />
-    </el-form-item>
-    <el-form-item label="发件人名称">
-      <el-input v-model="model.fromName" clearable />
+    <el-form-item label="收件邮箱" required>
+      <el-input v-model="model.toEmail" placeholder="接收新订单通知的邮箱" clearable />
+      <p class="hint">发信通道由扩展内置配置，你只需填写接收通知的邮箱。</p>
     </el-form-item>
     <el-form-item label="合并发信">
       <el-switch
@@ -74,5 +65,11 @@ async function onSave() {
 <style scoped>
 .settings-form :deep(.el-form-item) {
   margin-bottom: 10px;
+}
+.hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.4;
 }
 </style>

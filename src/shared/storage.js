@@ -22,7 +22,16 @@ export async function getState() {
     KEYS.pendingMails,
   ])
   return {
-    settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) },
+    settings: {
+      ...DEFAULT_SETTINGS,
+      enabled: data.settings?.enabled ?? DEFAULT_SETTINGS.enabled,
+      toEmail: data.settings?.toEmail ?? DEFAULT_SETTINGS.toEmail,
+      mergeNewOrdersInOneEmail:
+        data.settings?.mergeNewOrdersInOneEmail ??
+        DEFAULT_SETTINGS.mergeNewOrdersInOneEmail,
+      autoOpenOrderListTab:
+        data.settings?.autoOpenOrderListTab ?? DEFAULT_SETTINGS.autoOpenOrderListTab,
+    },
     platforms: data.platforms || [],
     seenOrders: data.seenOrders || { ...DEFAULT_SEEN },
     mailLogs: data.mailLogs || [...DEFAULT_MAIL_LOGS],
@@ -32,7 +41,14 @@ export async function getState() {
 
 export async function setSettings(partial) {
   const { settings } = await getState()
-  const next = { ...settings, ...partial }
+  const merged = { ...settings, ...partial }
+  // 只持久化用户侧字段；发信凭证走 mail-config / .env，不进 storage
+  const next = {
+    enabled: Boolean(merged.enabled),
+    toEmail: String(merged.toEmail || '').trim(),
+    mergeNewOrdersInOneEmail: Boolean(merged.mergeNewOrdersInOneEmail),
+    autoOpenOrderListTab: Boolean(merged.autoOpenOrderListTab),
+  }
   await chrome.storage.local.set({ [KEYS.settings]: next })
   return next
 }

@@ -11,8 +11,20 @@ import {
 import { diffNewOrders } from '../shared/orders.js'
 import { buildOrderEmail } from '../shared/email.js'
 import { sendWithRetry } from '../shared/resend.js'
+import { getMailSender, isMailSenderConfigured } from '../shared/mail-config.js'
 import { ensurePlatformAlarms, refreshPlatformTab } from './refresh.js'
 import { bumpBadge } from './badge.js'
+
+function mailSendArgs(toEmail, mail) {
+  const sender = getMailSender()
+  return {
+    apiKey: sender.resendApiKey,
+    from: sender.fromEmail,
+    fromName: sender.fromName,
+    to: toEmail,
+    ...mail,
+  }
+}
 
 async function syncAlarms() {
   const { platforms } = await getState()
@@ -129,13 +141,7 @@ async function handleCandidates({ platformId, orders }) {
       platformName: platform.name || platformId,
       orders: group,
     })
-    const result = await sendWithRetry({
-      apiKey: state.settings.resendApiKey,
-      from: state.settings.fromEmail,
-      fromName: state.settings.fromName,
-      to: state.settings.toEmail,
-      ...mail,
-    })
+    const result = await sendWithRetry(mailSendArgs(state.settings.toEmail, mail))
     await appendMailLog({
       at: Date.now(),
       platformId,
@@ -164,7 +170,7 @@ async function handleCandidates({ platformId, orders }) {
           type: 'basic',
           iconUrl: 'icons/icon128.png',
           title: '发信失败',
-          message: result.error || '请检查 Resend 配置',
+          message: result.error || '请检查发信配置或收件邮箱',
         })
       } catch (_) {}
     }
@@ -174,30 +180,24 @@ async function handleCandidates({ platformId, orders }) {
 
 async function handleTestEmail() {
   const { settings } = await getState()
+  if (!isMailSenderConfigured()) {
+    return { ok: false, error: '发信通道未配置（请开发者在 .env.local 填写 Resend）', id: null }
+  }
+  if (!settings.toEmail) {
+    return { ok: false, error: '请先填写收件邮箱', id: null }
+  }
   const mail = buildOrderEmail({
     platformName: '测试',
     orders: [{ orderId: 'TEST-001', fields: { 说明: '测试邮件' } }],
   })
-  return sendWithRetry({
-    apiKey: settings.resendApiKey,
-    from: settings.fromEmail,
-    fromName: settings.fromName,
-    to: settings.toEmail,
-    ...mail,
-  })
+  return sendWithRetry(mailSendArgs(settings.toEmail, mail))
 }
 
 async function retryPending() {
   const state = await getState()
   const left = []
   for (const item of state.pendingMails) {
-    const result = await sendWithRetry({
-      apiKey: state.settings.resendApiKey,
-      from: state.settings.fromEmail,
-      fromName: state.settings.fromName,
-      to: state.settings.toEmail,
-      ...item.mail,
-    })
+    const result = await sendWithRetry(mailSendArgs(state.settings.toEmail, item.mail))
     await appendMailLog({
       at: Date.now(),
       platformId: item.platformId,

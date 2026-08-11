@@ -1,9 +1,7 @@
 export const DEFAULT_SETTINGS = {
   enabled: true,
-  resendApiKey: '',
+  /** 用户只需配置：接收新订单通知的邮箱 */
   toEmail: '',
-  fromEmail: '',
-  fromName: '订单监控助手',
   mergeNewOrdersInOneEmail: true,
   autoOpenOrderListTab: true,
 }

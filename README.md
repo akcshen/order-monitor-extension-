@@ -36,21 +36,35 @@ npm run build
 2. 开启右上角「开发者模式」
 3. 点击「加载已解压的扩展程序」
 4. 选择项目根目录下的 `dist/` 文件夹
-5. 点击工具栏扩展图标，打开 Popup 配置邮件与平台规则
+5. 点击工具栏扩展图标，打开 Popup：用户只需填**收件邮箱**与监控配置
 
-## Resend 邮件配置
+## 发信配置（开发者）
 
-1. 在 [Resend](https://resend.com) 注册账号
-2. **验证发件域名**：Dashboard → Domains → 添加域名并完成 DNS 验证
-3. **创建 API Key**：Dashboard → API Keys → Create API Key（权限选「Sending access」即可）
-4. 在 Popup「邮件与总设置」中填写：
-   - **Resend API Key**：`re_xxx`（见下方安全提醒）
-   - **收件邮箱**：厂房侧接收新订单通知的地址
-   - **发件邮箱**：已验证域名下的地址，如 `noreply@your-domain.com`
-   - **发件人名称**：邮件显示名称，默认「订单监控助手」
-5. 点击「保存设置」，再点「发送测试邮件」确认配置正确
+发信凭证**不在 Popup 里填**，由你在构建前配置：
 
-> **安全提醒：** API Key 等同于发信凭证，仅保存在本机 `chrome.storage.local` 中，**切勿分享、提交到 Git 或截图外传**。泄露后请立即在 Resend 控制台撤销并重新创建。
+```bash
+cp .env.example .env.local
+# 编辑 .env.local：
+#   VITE_RESEND_API_KEY=re_xxx
+#   VITE_MAIL_FROM=noreply@your-domain.com
+#   VITE_MAIL_FROM_NAME=订单监控助手
+npm run build
+```
+
+1. 在 [Resend](https://resend.com) 验证发件域名并创建 API Key  
+2. 写入 `.env.local`（已在 `.gitignore`，勿提交公开仓库）  
+3. 重新 `npm run build` 后加载 `dist`  
+
+## 用户侧邮件设置
+
+在 Popup「设置」中只需填写：
+
+- **收件邮箱**：厂房侧接收新订单通知的地址  
+- （可选）总开关、合并发信、自动打开订单列表  
+
+然后「保存设置」→「发送测试邮件」。
+
+> **安全提醒：** API Key 会打进扩展包，解包仍可能被取出。仅分发给可信使用方；泄露后请立即在 Resend 撤销 Key。
 
 ## 配置平台规则示例
 

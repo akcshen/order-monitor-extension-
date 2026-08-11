@@ -9,13 +9,12 @@ describe('defaults', () => {
   it('DEFAULT_SETTINGS has required keys', () => {
     expect(DEFAULT_SETTINGS).toMatchObject({
       enabled: true,
-      resendApiKey: '',
       toEmail: '',
-      fromEmail: '',
-      fromName: '订单监控助手',
       mergeNewOrdersInOneEmail: true,
       autoOpenOrderListTab: true,
     })
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('resendApiKey')
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('fromEmail')
   })
 
   it('DEFAULT_STATE has settings and platforms keys', () => {
